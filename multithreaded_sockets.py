@@ -1,100 +1,65 @@
-# import socket programming library
-
-import argparse
-import getopt
-import socket
-import sys
-
-# import thread module
-#from _thread import *
-import _thread
 import threading
+import queue
 
-# Communication and threading
-lock_print = threading.Lock()
-DATA_SIZE = 100
-CONNECTION_IDS = {}
-
-# Arguments List
-ARGUMENT_LIST = sys.argv[1:]
-OPTS = "hmo:"
-LONG_OPTIONS = ["Help", "My_File", "Output="]
-
-MSG = "Adding description"
-
-try:
-    # Parsing args
-    args, vals = getopt.getopt(ARGUMENT_LIST, OPTS, LONG_OPTIONS)
-
-    for currentArg, currentValue in args:
-
-        if currentArg in ("-h", "--Help"):
-            print("Help")
-        elif currentArg in ("-m", "--My_File"):
-            print("Displaying file_name: ", sys.argv[0])
-        elif currentArg in ("-o", "--Output"):
-            print ("Enabling special output mode ", currentValue)
-
-except getopt.error as err:
-    # output error, and return with an error code
-    print(str(err))
-
-# thread function
-def start_thread(c):
-    """ application to fork new sockets and handle connections
-
-    Args:
-        c (socket object): socket object to send and receive messages.
+class WorkerThread(threading.Thread):
+    """ Worker thread is a wrapper for Threads and handles the 
+    thread pool of all connections in this application
+    
+    tailored to TCP communication
     """
-    while True:
+    def __init__(self, port='4545', ip='0.0.0.0'):
+        super().__init__()
+        self.event_queue = queue.Queue() 
+        self.running = True
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.start()  
 
-        # data received from client
-        data = c.recv(DATA_SIZE)
-        if not data:
-            print('Bye')
+    def add_connection(self, sockfd):
+        # handles adding socket fd to a new thread
+        #server_socket
+        return 0
 
-            # lock released on exit
-            lock_print.release()
-            break
+    def run(self):
+        while self.running:
+            try:
+                event = self.event_queue.get_nowait()  # Wait for an event with a timeout
+                self._event_message_rx(event)
+            except queue.Empty:
+                self.event_queue.clear()
+                pass  # No event received within the timeout
 
-        # reverse the given string from client
-        data = data[::-1]
+    def send_message(self, message):
+        self.event_queue.put(message)
 
-        # send back reversed string to client
-        c.send(data)
+    def _event_message_rx(self, event):
+        # Process the event here
+        print("Message received:", event)
 
-    # connection closed
-    c.close()
+    def _event_message_tx(self, event):
+        # Process the event here
+        print("Sending message:", event)
 
+    def _event_socket_open(self, event, sockfd):
+        # Process the event here
+        print("Opening connection:", event)
 
-def ConnectServer(dest_ip, port):
+    def _event_socket_close(self, event, sockfd):
+        # Process the event here
+        print("Closing connection:", event)
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((dest_ip, port))
-    print("socket binded to port", port)
+    def stop(self):
+        # should send close request to all connections that are open
+        self.running = False
 
-    # put the socket into listening mode
-    s.listen(5)
-    print("socket is listening")
+if __name__ == "__main__":
+    
+    # start thread manager
+    socket_manager = WorkerThread()
 
-    # a forever loop until client wants to exit
-    while True:
+    socket_manager.send_message("Event 1")
+    socket_manager.send_message("Event 2")
+    # Simulate sending events
 
-        # establish connection with client
-        c, addr = s.accept()
-
-        # lock acquired by client
-        lock_print.acquire()
-        print('Connected to :', addr[0], ':', addr[1])
-
-        # Start a new thread and return its identifier
-        start_new_thread(start_thread, (c,))
-    s.close()
-
-
-if __name__ == '__main__':
-    DEST_IP = "0.0.0.0"
-    DEST_IP = "192.168.0.10"
-    DEST_IP = "127.0.0.1"
-    PORT = 4545
-    ConnectServer(DEST_IP, PORT)
+    # Wait for worker to finish processing events
+    socket_manager.join()
+    socket_manager.stop()
