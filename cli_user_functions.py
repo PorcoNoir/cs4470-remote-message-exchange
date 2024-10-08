@@ -1,7 +1,9 @@
 import shlex
+import sys
 
-def shell_loop():
+def shell_loop(port):
     while True:
+        print("Listening on port", port)
         # Read input from the user
         user_input = input("chat: ")  # Prompt similar to a shell
         # Check if the user entered a command (non-empty)
@@ -57,4 +59,8 @@ def dummy_exit():
     print("Exiting and closing all connections (dummy)")
 
 if __name__ == "__main__":
-    shell_loop()
+    if len(sys.argv) < 2:
+        sys.exit(1)
+    
+    port = sys.argv[1]
+    shell_loop(port)
