@@ -1,6 +1,11 @@
+
+# from prettytable import PrettyTable
+    
 import socket
 import threading
 import queue
+
+import socket_implementation as tcp_sockets
 
 
 class WorkerThread(threading.Thread):
@@ -9,26 +14,83 @@ class WorkerThread(threading.Thread):
     
     tailored to TCP communication
     """
-    def __init__(self, port='4545', ip='0.0.0.0'):
+    def __init__(self, port):
         super().__init__()
         self.command_queue = queue.Queue()
         self.running = True
-        self.event_hander = threading.Event()
-        self.connection_list = {}
-        
-        #TODO: might be nice to replace this with our own TcpSocket wrapper that way we can add custom methods/properties
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
-        
+        self.event_handler = threading.Event()
+        self.connection_list = {}  # {(connection 1), (2), (etc)}
+        self.server_socket = -1
+                     
         # ready to start thread
-        print("Starting worker thread and going back to cli")
+        print("Starting worker thread and going back to CLI")
+        
+        self.event_handler.set()
+        self._start_tcp_server(port)
         self.start()
-        self.event_hander.set()  
 
-    def set_event_handle():
+    def _update_connections(self, action, 
+                            ip_addr='0.0.0.0', port=5000, socket_object=-1,
+                            connection_id=0):
+        try:
+            num_connections = max(self.connection_list.keys())
+        except:
+            num_connections = 0
+        
+        if action == "push":
+            self.connection_list[num_connections+1] = [ip_addr, port]
+        elif action == "pop":
+            try:
+                self.connection_list.pop(connection_id)
+                self._terminate_connection(self.connection_list[connection_id])
+            except KeyError:
+                print('Connection does not exist, please run >> list')
+            
+        print("updated connections ...")
+            
+    def _terminate_connection(self, connection_id):
+        ip = connection_id[0]
+        port = connection_id[1]
+        try:
+            num_connections = max(self.connection_list.keys())
+        except:
+            num_connections = 0
+    
+    def _start_tcp_server(self, port):
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket_thread = tcp_sockets.start_server(self.server_socket, port)
+        self._update_connections("push",ip_addr=self.server_socket.getsockname()[0], port=port, socket_object=self.server_socket)
+        #TODO: might be nice to replace this with our own TcpSocket wrapper that way we can add custom methods/properties
+        
+    def _process_event(self, event):
+        # Process the event here
+        if ("myip" in event):
+            print("myip()")
+        elif ("myport" in event):
+            print("myport()")
+        elif ("list" in event):
+            print("list()")
+        elif ("terminate" in event):
+            print("terminate():")
+            id = event[0]
+            self._update_connections("push", connection_id=id)
+        elif ("send" in event):
+            print("Message received:", event)
+        elif ("exit" in event):
+            print("Closing all socket connections")
+            self.stop()
+        else:
+            print("Not a supported command, please type help")
+
+    def set_event_handle(self, command):
         if self.event_handler.is_set():
             pass
         else:
             self.event_handler.set()
+            
+        if "exit" in command:
+            self.stop()
+        #self._process_event
         
     # TODO: still have to see how to implement this.
     # def from_cli(self, event):
@@ -36,15 +98,22 @@ class WorkerThread(threading.Thread):
     #     then gives back control to cli to continue to wait for user input
     #     """
     def list_connections(self):
-        print("TBD: TEMPLATE FOR CONNECTIONS LIST")
+        
+        print('id:','IP Address','Port No.', sep="\t")
+        for k,v in self.connection_list.items():
+            print(k, v[0], v[1], sep="\t")
+        #print("TBD: TEMPLATE FOR CONNECTIONS LIST")
         return        
 
-    def _add_connection(self, dest_address, port):
-        connect(dest_address, port)  # from socket_implementation code
-
-    def add_connection(self, sockfd):
+    def add_connection(self, dest_address, port):
         # handles adding socket fd to a new thread
         #server_socket
+        self.event_handler.clear()
+        client_socket = tcp_sockets.connect(dest_address, port)
+        self.event_handler.set()
+        self._update_connections("push", ip_addr=dest_address, port=port, socket_object=client_socket)
+        
+        self.event_handler.clear()
         return 0
 
     def run(self):
@@ -58,55 +127,6 @@ class WorkerThread(threading.Thread):
 
     def send_message(self, message):
         self.command_queue.put(message)
-
-    def _process_event(self, event):
-        # Process the event here
-        if ("myip" in event):
-            print("myip()")
-        elif ("myport" in event):
-            print("myport()")
-        elif ("connect" in event):
-            # event[0] should be "connect"
-            try:
-                destination_address = event[1]
-                port = event[2]
-                self._add_connection(destination_address, port)
-            except:
-                print("connect()")
-        elif ("list" in event):
-            print("list()")
-            for val in self.connection_list:
-                print(val)
-        elif ("terminate" in event):
-            print("terminate()")
-        elif ("send" in event):
-            print("Message received:", event)
-        elif ("exit" in event):
-            print("Closing all socket connections")
-            self.stop()
-        else:
-            print("Not a supported command, please type help")
-
-## TCP Socket methods 
-    def _event_message_rx(self, event):
-        # Process the event here
-        print("Message received:", event)
-
-    def _event_message_tx(self, event):
-        # Process the event here
-        print("Sending message:", event)
-
-    def _event_socket_open(self, event, sockfd):
-        # Process the event here
-        print("Opening connection:", event)
-
-    def _event_socket_close(self, event, sockfd):
-        # Process the event here
-        print("Closing connection:", event)
-        
-    def _terminate_connection(self, connection_id):
-        # function to terminate connection_id socket
-        return 0
 
     def stop(self):
         # should send close request to all connections that are open
