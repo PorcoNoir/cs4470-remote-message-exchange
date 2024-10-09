@@ -37,24 +37,36 @@ class WorkerThread(threading.Thread):
         except:
             num_connections = 0
         
+        print(self.connection_list.keys())
         if action == "push":
-            self.connection_list[num_connections+1] = [ip_addr, port]
+            self.connection_list[num_connections + 1] = [ip_addr, port, socket_object]
+            print('Adding connection: ', self.connection_list[num_connections+1])
         elif action == "pop":
             try:
-                self.connection_list.pop(connection_id)
-                self._terminate_connection(self.connection_list[connection_id])
+                print("trying to terminate: ", connection_id)
+                if connection_id in self.connection_list.keys():
+                    self._terminate_connection(connection_id)
+                    self.connection_list.pop(connection_id, None)
+                else:
+                    print('key not found')
             except KeyError:
                 print('Connection does not exist, please run >> list')
             
-        print("updated connections ...")
+        print("updated connections ... num connections is now: ", self.connection_list.keys())
             
     def _terminate_connection(self, connection_id):
-        ip = connection_id[0]
-        port = connection_id[1]
+        values = self.connection_list[connection_id]
+        ip = values[0]
+        port = values[1]
+        sock_obj = values[2]
+        
+        print('values to be deleted are: ', values)
         try:
             num_connections = max(self.connection_list.keys())
         except:
             num_connections = 0
+        if sock_obj != -1:
+            sock_obj.close()
     
     def _start_tcp_server(self, port):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -62,35 +74,29 @@ class WorkerThread(threading.Thread):
         self._update_connections("push",ip_addr=self.server_socket.getsockname()[0], port=port, socket_object=self.server_socket)
         #TODO: might be nice to replace this with our own TcpSocket wrapper that way we can add custom methods/properties
         
-    def _process_event(self, event):
+    def process_event(self, event):
+        self.set_event_handle()
         # Process the event here
-        if ("myip" in event):
-            print("myip()")
-        elif ("myport" in event):
-            print("myport()")
-        elif ("list" in event):
-            print("list()")
-        elif ("terminate" in event):
+        if ("terminate" in event):
             print("terminate():")
-            id = event[0]
-            self._update_connections("push", connection_id=id)
+            id = event[1]
+            self._update_connections("pop", connection_id=int(id))
         elif ("send" in event):
             print("Message received:", event)
+        elif ("connect" in event):
+            print("[WORKER] Trying to connect:", event)
         elif ("exit" in event):
             print("Closing all socket connections")
             self.stop()
         else:
             print("Not a supported command, please type help")
 
-    def set_event_handle(self, command):
+    def set_event_handle(self):
         if self.event_handler.is_set():
             pass
         else:
             self.event_handler.set()
             
-        if "exit" in command:
-            self.stop()
-        #self._process_event
         
     # TODO: still have to see how to implement this.
     # def from_cli(self, event):
@@ -120,7 +126,7 @@ class WorkerThread(threading.Thread):
         while self.running:
             try:
                 event = self.command_queue.get(block=False, timeout=1)  # Wait for an event with a timeout
-                self._process_event(event)
+                self.process_event(event)
             except queue.Empty:
                 # self.command_queue.clear()
                 pass  # No event received within the timeout
