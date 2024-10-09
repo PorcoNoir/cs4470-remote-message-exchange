@@ -1,5 +1,6 @@
 import queue
 import shlex
+import sys
 import threading
 
 from multithreaded_sockets import WorkerThread
@@ -7,13 +8,14 @@ from multithreaded_sockets import WorkerThread
 def shell_loop(port, cli_event):
     
     # Start thread manager
-    socket_manager = WorkerThread()
+    socket_manager = WorkerThread(port)
     cli_event.set()
+    user_queue = queue.Queue() # using notification method to notify other threads
+        
     while True:
         print("Listening on port", port)
         # Read input from the user
-        user_input = input("chat: ")  # Prompt similar to a shell
-        user_queue = queue.Queue() # using notification method to notify other threads
+        user_input = input(">> ")  # Prompt similar to a shell
         # Check if the user entered a command (non-empty)
         if user_input.strip():
             tokens = shlex.split(user_input)
@@ -24,18 +26,19 @@ def shell_loop(port, cli_event):
             # Command routing: decide what function to call based on the command
             if command == "help":
                 # need the command in the expected argument
-                user_queue.put()
                 dummy_help()
             elif command == "myip":
                 dummy_myip()  
             elif command == "myport":
                 dummy_myport()
-            elif command == "connect":                
-                destination = "127.0.0.1"
-                port = 5000
-                socket_manager.set_event_handle()
+            elif command == "connect":
+      
+                destination = tokens[1]
+                port = tokens[2]
+                    
+                cli_event.clear()
+                socket_manager.set_event_handle(command)
                 socket_manager.add_connection(destination, port)
-                print("Error: 'connect' command requires <destination> <port no>.")
             elif command == "list":
                 socket_manager.list_connections()
             elif command == "terminate":
@@ -43,18 +46,20 @@ def shell_loop(port, cli_event):
                 # argument 1 should be an int from connections list (is the value in range?)
                 # if no argument is given then should show list of connections
                 socket_manager.list_connections()
-                print("Error: 'terminate' command requires <connection id>.")
+                # print("Error: 'terminate' command requires <connection id>.")
             elif command == "send":
                 # suggestion: insert pre processing on the arguments
                 # conditions:
                 # should be two arguments
                 # argument 1 should be an int from connections list (is the value in range?)
                 # argument 2 should be the message (pre processing for the message length)
-                socket_manager.set_event_handle()
-                socket_manager.send_message(connection_id, command)  # wrapper to route message to 
+                socket_manager.set_event_handle(command)
+                try:
+                    socket_manager.send_message(connection_id, command)  # wrapper to route message to 
+                except:
+                    pass
             elif command == "exit":
-                socket_manager.set_event_handle()
-                socket_manager.stop()  # wrapper to close any open conditions and close the thread manager
+                socket_manager.set_event_handle(command)
                 break  # Exit the loop to stop the shell
             else:
                 # If the command isn't recognized, inform the user
@@ -64,8 +69,8 @@ def shell_loop(port, cli_event):
 
 ## suggestion to remove the functions below unless you add logic to them. 
 def dummy_help():
-    print("Available commands: help, myip, myport, connect, list, terminate, send, exit")
-
+    print("Available commands: help\nmyip\nmyport\nconnect\nlist\nterminate\nsend\nexit\n")
+    #TODO: please add descriptions for these summarizing their functionality and how the user should call them
 def dummy_myip():
     print("Your IP address is 192.168.1.2 (dummy)")
 
