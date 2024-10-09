@@ -37,7 +37,7 @@ def shell_loop(port, cli_event):
                 port = tokens[2]
                     
                 cli_event.clear()
-                socket_manager.set_event_handle(command)
+                socket_manager.process_event(command)
                 socket_manager.add_connection(destination, port)
             elif command == "list":
                 socket_manager.list_connections()
@@ -45,7 +45,8 @@ def shell_loop(port, cli_event):
                 # suggestion: insert pre processing on the arguments
                 # argument 1 should be an int from connections list (is the value in range?)
                 # if no argument is given then should show list of connections
-                socket_manager.list_connections()
+                cli_event.clear()
+                socket_manager.process_event(tokens)
                 # print("Error: 'terminate' command requires <connection id>.")
             elif command == "send":
                 # suggestion: insert pre processing on the arguments
@@ -53,13 +54,15 @@ def shell_loop(port, cli_event):
                 # should be two arguments
                 # argument 1 should be an int from connections list (is the value in range?)
                 # argument 2 should be the message (pre processing for the message length)
-                socket_manager.set_event_handle(command)
+                cli_event.clear()
+                socket_manager.process_event(tokens)
                 try:
                     socket_manager.send_message(connection_id, command)  # wrapper to route message to 
                 except:
                     pass
             elif command == "exit":
-                socket_manager.set_event_handle(command)
+                cli_event.clear()
+                socket_manager.process_event(tokens)
                 break  # Exit the loop to stop the shell
             else:
                 # If the command isn't recognized, inform the user
