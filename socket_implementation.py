@@ -158,15 +158,18 @@ def launch_user_input_loop():
 
 
 # Main thread start ----------------------------------------------------------------
+def start_tcp_server(port):
+    server_sock = socket.socket()
+    host = socket.gethostname()
+    # port = (int)(sys.argv[1])
+    ip_address = socket.gethostbyname(host)
 
-server_sock = socket.socket()
-host = socket.gethostname()
-port = (int)(sys.argv[1])
-ip_address = socket.gethostbyname(host)
+    # Start the thread that this machine's server listens on.
+    tcp_server = threading.Thread(target=server_thread, args=("server thread", server_sock, host, port, 1))
+    return tcp_server
+    
+    # Give control back to CLI
 
-# Start the thread that this machine's server listens on.
-x_server = threading.Thread(target=server_thread, args=("server thread", host, port))
-x_server.start()
-
-# Start accepting user input with loop.
-launch_user_input_loop()
+    # Start accepting user input with loop.
+    #launch_user_input_loop()
+    
