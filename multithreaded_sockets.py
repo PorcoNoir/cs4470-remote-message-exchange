@@ -37,10 +37,9 @@ class WorkerThread(threading.Thread):
         except:
             num_connections = 0
         
-        print(self.connection_list.keys())
         if action == "push":
             self.connection_list[num_connections + 1] = [ip_addr, port, socket_object]
-            print('Adding connection: ', self.connection_list[num_connections+1])
+            print(f"Adding connection at {ip_addr}:{port}")
         elif action == "pop":
             try:
                 print("trying to terminate: ", connection_id)
@@ -48,11 +47,11 @@ class WorkerThread(threading.Thread):
                     self._terminate_connection(connection_id)
                     self.connection_list.pop(connection_id, None)
                 else:
-                    print('key not found')
+                    print('Connection id not found')
             except KeyError:
-                print('Connection does not exist, please run >> list')
+                print('Connection id does not exist, please run the command \'list\'')
             
-        print("updated connections ... num connections is now: ", self.connection_list.keys())
+        print("Updated connections ... num connections is now: ", len(self.connection_list.keys()))
             
     def _terminate_connection(self, connection_id):
         values = self.connection_list[connection_id]
@@ -60,7 +59,7 @@ class WorkerThread(threading.Thread):
         port = values[1]
         sock_obj = values[2]
         
-        print('values to be deleted are: ', values)
+        print('Values to be deleted are: ', values)
         try:
             num_connections = max(self.connection_list.keys())
         except:
@@ -70,10 +69,24 @@ class WorkerThread(threading.Thread):
     
     def _start_tcp_server(self, port):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.event_handler.clear()
         self.server_socket_thread = tcp_sockets.start_server(self.server_socket, port)
-        self._update_connections("push",ip_addr=self.server_socket.getsockname()[0], port=port, socket_object=self.server_socket)
-        #TODO: might be nice to replace this with our own TcpSocket wrapper that way we can add custom methods/properties
+        #self.myip = self.server_socket.getsockname()[0]
+        self.myip = '127.0.0.1'
+        self.myport = port
         
+        self._update_connections("push",ip_addr=self.myip, 
+                                        socket_object=self.server_socket,
+                                        port=self.myport)
+
+        #TODO: might be nice to replace this with our own TcpSocket wrapper that way we can add custom methods/properties
+    
+    def get_myip(self):
+        return self.myip
+    
+    def get_myport(self):
+        return self.myport
+    
     def process_event(self, event):
         self.set_event_handle()
         # Process the event here
@@ -84,7 +97,9 @@ class WorkerThread(threading.Thread):
         elif ("send" in event):
             print("Message received:", event)
         elif ("connect" in event):
-            print("[WORKER] Trying to connect:", event)
+            print(f"Attempting connection to {event[1]}:{event[2]}")
+            self.add_connection(event[1], event[2])
+            # add send and receive threads here
         elif ("exit" in event):
             print("Closing all socket connections")
             self.stop()
@@ -96,13 +111,7 @@ class WorkerThread(threading.Thread):
             pass
         else:
             self.event_handler.set()
-            
-        
-    # TODO: still have to see how to implement this.
-    # def from_cli(self, event):
-    #     """ function receives event from the cli, will execute the command 
-    #     then gives back control to cli to continue to wait for user input
-    #     """
+               
     def list_connections(self):
         
         print('id:','IP Address','Port No.', sep="\t")
@@ -114,7 +123,6 @@ class WorkerThread(threading.Thread):
     def add_connection(self, dest_address, port):
         # handles adding socket fd to a new thread
         #server_socket
-        self.event_handler.clear()
         client_socket = tcp_sockets.connect(dest_address, port)
         self.event_handler.set()
         self._update_connections("push", ip_addr=dest_address, port=port, socket_object=client_socket)
