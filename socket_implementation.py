@@ -81,6 +81,7 @@ def connect(destination, port_no):
     # else, do the deed
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+    print(port_no)
     port_no = int(port_no)
 
     print("Debug: connecting", destination, "on port", port_no)

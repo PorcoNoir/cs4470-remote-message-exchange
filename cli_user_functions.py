@@ -11,9 +11,9 @@ def shell_loop(port, cli_event):
     socket_manager = WorkerThread(port)
     cli_event.set()
     user_queue = queue.Queue() # using notification method to notify other threads
-        
+    print("Listening on port", port)       
+    
     while True:
-        print("Listening on port", port)
         # Read input from the user
         user_input = input(">> ")  # Prompt similar to a shell
         # Check if the user entered a command (non-empty)
@@ -21,24 +21,25 @@ def shell_loop(port, cli_event):
             tokens = shlex.split(user_input)
 
             command = tokens[0]
-            cli_event
+            cli_event.set()
             # Call the appropriate function or dummy function based on the command
             # Command routing: decide what function to call based on the command
             if command == "help":
                 # need the command in the expected argument
                 dummy_help()
             elif command == "myip":
-                dummy_myip()  
+                print(socket_manager.get_myip())
             elif command == "myport":
-                dummy_myport()
+                print(socket_manager.get_myport())
             elif command == "connect":
       
                 destination = tokens[1]
                 port = tokens[2]
                     
                 cli_event.clear()
-                socket_manager.process_event(command)
-                socket_manager.add_connection(destination, port)
+                socket_manager.process_event(tokens)
+                
+                # socket_manager.add_connection(destination, port)
             elif command == "list":
                 socket_manager.list_connections()
             elif command == "terminate":
@@ -68,6 +69,9 @@ def shell_loop(port, cli_event):
                 # If the command isn't recognized, inform the user
                 cli_event.clear()
                 print("Unknown command: ", command)
+        else:
+            # logic for thread control to server listener
+            return
 
 
 ## suggestion to remove the functions below unless you add logic to them. 
