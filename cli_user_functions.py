@@ -157,7 +157,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(1)
     
-    port = sys.argv[1]
+    port = (int)(sys.argv[1])
     event = threading.Event()
     cli_thread = threading.Thread(target=shell_loop, args=(port, event))
     cli_thread.start()

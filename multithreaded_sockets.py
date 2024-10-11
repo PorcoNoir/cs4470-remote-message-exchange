@@ -6,6 +6,7 @@ import threading
 import queue
 
 import socket_implementation as tcp_sockets
+from sock import TcpSocket
 
 
 class WorkerThread(threading.Thread):
@@ -70,7 +71,8 @@ class WorkerThread(threading.Thread):
     def _start_tcp_server(self, port):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.event_handler.clear()
-        self.server_socket_thread = tcp_sockets.start_server(self.server_socket, port)
+        print("*************************************", port)
+        self.server_socket_thread = TcpSocket.start_server_thread(self.server_socket, port)
         #self.myip = self.server_socket.getsockname()[0]
         self.myip = '127.0.0.1'
         self.myport = port
@@ -122,12 +124,14 @@ class WorkerThread(threading.Thread):
 
     def add_connection(self, dest_address, port):
         # handles adding socket fd to a new thread
-        #server_socket
-        client_socket = tcp_sockets.connect(dest_address, port)
-        self.event_handler.set()
-        self._update_connections("push", ip_addr=dest_address, port=port, socket_object=client_socket)
-        
-        self.event_handler.clear()
+
+        client_socket = TcpSocket.connect(dest_address, port)
+        # If connection is successful and a socket is returned to client_socket.
+        if client_socket:
+            self.event_handler.set()
+            self._update_connections("push", ip_addr=dest_address, port=port, socket_object=client_socket)
+            self.event_handler.clear()
+
         return 0
 
     def run(self):
