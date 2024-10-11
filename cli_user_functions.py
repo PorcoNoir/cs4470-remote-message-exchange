@@ -2,7 +2,6 @@ import queue
 import shlex
 import sys
 import threading
-import re 
 
 from multithreaded_sockets import WorkerThread
 
@@ -12,9 +11,9 @@ def shell_loop(port, cli_event):
     socket_manager = WorkerThread(port)
     cli_event.set()
     user_queue = queue.Queue() # using notification method to notify other threads
-        
+    print("Listening on port", port)       
+    
     while True:
-        print("Listening on port", port)
         # Read input from the user
         user_input = input(">> ")  # Prompt similar to a shell
         # Check if the user entered a command (non-empty)
@@ -29,9 +28,9 @@ def shell_loop(port, cli_event):
                 # need the command in the expected argument
                 help()
             elif command == "myip":
-                socket_manager.my_ip()  
+                print(socket_manager.get_myip())  
             elif command == "myport":
-                dummy_myport()
+                print(socket_manager.get_myport())
             elif command == "connect":
                 if len(tokens) < 3:
                     print("Error: 'connect' command requires <destination> <port>.")
@@ -93,6 +92,10 @@ def shell_loop(port, cli_event):
                 # If the command isn't recognized, inform the user
                 cli_event.clear()
                 print("Unknown command: ", command)
+        else:
+            # logic for thread control to server listener
+            return
+
 
 ## suggestion to remove the functions below unless you add logic to them. 
 def help():
@@ -148,22 +151,6 @@ exit
    list by removing the peer that exits.
     """
     print(text)
-    #TODO: please add descriptions for these summarizing their functionality and how the user should call them
-def dummy_myip():
-    #i Think i do need this one
-    print( )
-
-def dummy_myport():
-    print("Listening on port 4545 (dummy)")
-
-#def dummy_connect(destination, port_num):
-#   print("Connecting to ", destination," on port ", port_num)
-
-#def dummy_terminate(connection_id):
-#   print("Terminating connection", connection_id)
-
-#def dummy_send(connection_id, message):
-#   print("Message sent to ", connection_id,": ", message)
 
 if __name__ == "__main__":
     

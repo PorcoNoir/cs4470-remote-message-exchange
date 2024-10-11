@@ -20,17 +20,23 @@ def create_client_sock(full_socket, client_address):
     full_socket.close()
 
 # server_thread function -------------------------------------------------
-def server_thread(name, host, port):
+def server_thread(name, server_address, port):
+    server_address = server_sock.getsockname()
+    host = server_address[0]
+    
     print("Debug: Starting", name)
 
     server_sock.bind((host, port))
 
     print("Debug: Listening on port:", port)
 
+    tcp_event = threading.Event()
+    tcp_event.set()
     server_sock.listen(5)
-    
+    tcp_event.clear()
     # listen on the port, call function to create client socket when a machine connects
     while True:
+        #TODO: we need the client socket returned
         full_socket, client_address = server_sock.accept()
         print("Debug: Full socket info:", full_socket)
         print("Debug: Client address (host, port):", client_address)
@@ -75,6 +81,7 @@ def connect(destination, port_no):
     # else, do the deed
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+    print(port_no)
     port_no = int(port_no)
 
     print("Debug: connecting", destination, "on port", port_no)
@@ -87,6 +94,8 @@ def connect(destination, port_no):
         print("Connection was refused. Make sure you are entering available destinations and/or port numbers.")
     except TimeoutError as te:
         print("Connection was refused. Make sure you are entering available destinations and/or port numbers.")
+        
+    return client_socket
 
 def send_message(connection_id, message):
     # if connection id not in list, give the user a message
@@ -158,15 +167,14 @@ def launch_user_input_loop():
 
 
 # Main thread start ----------------------------------------------------------------
+def start_server(server_sock, port):
 
-server_sock = socket.socket()
-host = socket.gethostname()
-port = (int)(sys.argv[1])
-ip_address = socket.gethostbyname(host)
+    # Start the thread that this machine's server listens on.
+    tcp_server = threading.Thread(target=server_thread, args=("server thread", server_sock, port))
+    return tcp_server
+    
+    # Give control back to CLI
 
-# Start the thread that this machine's server listens on.
-x_server = threading.Thread(target=server_thread, args=("server thread", host, port))
-x_server.start()
-
-# Start accepting user input with loop.
-launch_user_input_loop()
+    # Start accepting user input with loop.
+    #launch_user_input_loop()
+    
