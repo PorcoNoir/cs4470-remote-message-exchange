@@ -1,5 +1,6 @@
 # CS 4470 - Chat Application With Socket Programming Assignment
 
+import errno
 import socket
 import sys
 import threading
@@ -20,36 +21,51 @@ def create_client_sock(full_socket, client_address):
     full_socket.close()
 
 # server_thread function -------------------------------------------------
-def server_thread(name, server_address, port):
+def server_thread(name, server_sock, port):
     server_address = server_sock.getsockname()
     host = server_address[0]
     
     print("Debug: Starting", name)
-
+    print(host,":",port)
     server_sock.bind((host, port))
 
     print("Debug: Listening on port:", port)
-
+    server_sock.settimeout(1)
     tcp_event = threading.Event()
     tcp_event.set()
     server_sock.listen(5)
     tcp_event.clear()
+        #print("Debug: Finishing", name)
     # listen on the port, call function to create client socket when a machine connects
-    while True:
+
+def is_socket_open(s):
+    """Checks if a socket is open."""
+    try:
+        server_address = s.getsockname()
+        s.settimeout(1)  # Set a timeout for the connection attempt
+        s.connect((server_address[0], server_address[1]))
+        return True
+    except OSError as e:
+        if e.errno == errno.EISCONN:
+            return True
+    except (socket.timeout, ConnectionRefusedError):
+        return False
+
+def accept_incoming_connections(server_sock):
+    new_incoming_connection = False
+    while not new_incoming_connection:
         #TODO: we need the client socket returned
         full_socket, client_address = server_sock.accept()
         print("Debug: Full socket info:", full_socket)
         print("Debug: Client address (host, port):", client_address)
         create_client_sock(full_socket, client_address)
-
-        print("Debug: Total connections:", total_connections)
+        new_incoming_connection = True
         
         # for x, y in list_of_sockets.items():
         #     print(x, ":", y)
 
         print("Debug: Bottom of server_thread while loop.")
-        
-    print("Debug: Finishing", name)
+        return full_socket
 
 # Functions to handle user input commands.
 
@@ -170,6 +186,7 @@ def launch_user_input_loop():
 def start_server(server_sock, port):
 
     # Start the thread that this machine's server listens on.
+    port = int(port)
     tcp_server = threading.Thread(target=server_thread, args=("server thread", server_sock, port))
     return tcp_server
     

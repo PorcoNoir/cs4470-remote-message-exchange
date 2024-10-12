@@ -1,4 +1,5 @@
 import queue
+import select
 import shlex
 import sys
 import threading
@@ -8,20 +9,29 @@ from multithreaded_sockets import WorkerThread
 def shell_loop(port, cli_event):
     
     # Start thread manager
-    socket_manager = WorkerThread(port)
+    #socket_manager = WorkerThread(port)
     cli_event.set()
     user_queue = queue.Queue() # using notification method to notify other threads
     print("Listening on port", port)       
-    
+
+    print(">> ", end='', flush=True)
+    sys.stdout.flush()
     while True:
         # Read input from the user
-        user_input = input(">> ")  # Prompt similar to a shell
+
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.5)  # 1-second timeout for input
+
+        if rlist:
+            user_input = sys.stdin.readline().strip()  # Read user input if available
+        else:
+            user_input = None
+            
         # Check if the user entered a command (non-empty)
-        if user_input.strip():
+        # if user_input:
+        if sys.stdin in rlist:
             tokens = shlex.split(user_input)
 
             command = tokens[0]
-            cli_event
             # Call the appropriate function or dummy function based on the command
             # Command routing: decide what function to call based on the command
             if command == "help":
@@ -78,11 +88,10 @@ def shell_loop(port, cli_event):
                             return
 
                         cli_event.clear()
-                        socket_manager.process_event(command)
+                        socket_manager.process_event(tokens)
                         socket_manager.send_message(connection_id, message)
                     except ValueError:
                         print("Error: Connection id must be an integer.")
-
             elif command == "exit":
                 cli_event.clear()
                 #can also use command in .process_event(command) if handles are just the command
@@ -92,9 +101,15 @@ def shell_loop(port, cli_event):
                 # If the command isn't recognized, inform the user
                 cli_event.clear()
                 print("Unknown command: ", command)
+                
+            sys.stdout.flush()
+            print(">> ", end='', flush=True)
         else:
-            # logic for thread control to server listener
-            return
+            # TODO: logic for thread control to server listener
+            cli_event.clear()
+            socket_manager.server_listening()
+            cli_event.set()
+            # timer for 5 seconds
 
 
 ## suggestion to remove the functions below unless you add logic to them. 
@@ -158,6 +173,8 @@ if __name__ == "__main__":
         sys.exit(1)
     
     port = sys.argv[1]
+    global socket_manager
+    socket_manager = WorkerThread(port)
     event = threading.Event()
     cli_thread = threading.Thread(target=shell_loop, args=(port, event))
     cli_thread.start()
