@@ -49,7 +49,7 @@ def shell_loop(port, cli_event):
                     port = tokens[2]
                     
                     cli_event.clear()
-                    socket_manager.process_event(command)
+                    socket_manager.process_event(tokens)
                     socket_manager.add_connection(destination, port)
             elif command == "list":
                 socket_manager.list_connections()
@@ -63,7 +63,7 @@ def shell_loop(port, cli_event):
                             print("Error: Connection id out of range.")
                             return
                         cli_event.clear()
-                        socket_manager.process_event(command)
+                        socket_manager.process_event(tokens)
                         socket_manager.terminate_connection(connection_id)
                     except ValueError:
                         print("Error: Connection id must be an integer.")
@@ -94,7 +94,7 @@ def shell_loop(port, cli_event):
                         print("Error: Connection id must be an integer.")
             elif command == "exit":
                 cli_event.clear()
-                #can also use command in .process_event(command) if handles are just the command
+                #can also use command in .process_event(tokens) if handles are just the command
                 socket_manager.process_event(tokens)
                 break  # Exit the loop to stop the shell
             else:

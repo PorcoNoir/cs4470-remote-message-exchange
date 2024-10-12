@@ -27,6 +27,7 @@ def server_thread(name, server_sock, port):
     
     print("Debug: Starting", name)
     print(host,":",port)
+    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_sock.bind((host, port))
 
     print("Debug: Listening on port:", port)
@@ -58,7 +59,7 @@ def accept_incoming_connections(server_sock):
         full_socket, client_address = server_sock.accept()
         print("Debug: Full socket info:", full_socket)
         print("Debug: Client address (host, port):", client_address)
-        create_client_sock(full_socket, client_address)
+        #create_client_sock(full_socket, client_address)
         new_incoming_connection = True
         
         # for x, y in list_of_sockets.items():
@@ -97,19 +98,17 @@ def connect(destination, port_no):
     # else, do the deed
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    print(port_no)
-    port_no = int(port_no)
-
-    print("Debug: connecting", destination, "on port", port_no)
+    print("Debug: connecting", destination, ":", port_no)
 
     try:
+        print("connecting...")
         client_socket.connect((destination, port_no))
-        print(client_socket.recv(1024))
+        #print(client_socket.recv(1024))
 
     except ConnectionRefusedError as cre:
-        print("Connection was refused. Make sure you are entering available destinations and/or port numbers.")
+        print("ConnectionRefusedError. Make sure you are entering available destinations and/or port numbers.")
     except TimeoutError as te:
-        print("Connection was refused. Make sure you are entering available destinations and/or port numbers.")
+        print("TimeoutError. Make sure you are entering available destinations and/or port numbers.")
         
     return client_socket
 

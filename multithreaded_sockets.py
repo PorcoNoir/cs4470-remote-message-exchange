@@ -3,6 +3,7 @@
     
 import socket
 import threading
+import time
 import queue
 
 import socket_implementation as tcp_sockets
@@ -28,6 +29,7 @@ class WorkerThread(threading.Thread):
         self.event_handler.set()
         self._start_tcp_server(port)
         self.start()
+        self.server_socket_thread.start()
 
     def _update_connections(self, action, 
                             ip_addr='0.0.0.0', port=5000, socket_object=-1,
@@ -81,6 +83,27 @@ class WorkerThread(threading.Thread):
 
         #TODO: might be nice to replace this with our own TcpSocket wrapper that way we can add custom methods/properties
     
+    def server_listening(self):
+        self.event_handler.set()
+        start_time = time.time()
+        end_time = start_time + 1
+
+        while time.time() < end_time:
+            # Check if socket is open
+            if tcp_sockets.is_socket_open(self.server_socket):
+                try:
+                    # Accept incoming connections
+                    client_sock = tcp_sockets.accept_incoming_connections(self.server_socket)
+                    dest_address = client_sock.getpeername()
+
+                    # Update the connection details
+                    self._update_connections("push", ip_addr=dest_address[0], port=dest_address[1], socket_object=client_sock)
+                except TimeoutError:
+                    # Handle timeout error for socket accept
+                    # print("Connection timed out while listening for incoming connections.")
+                    break  # You might want to break or handle the retry logic here
+
+
     def get_myip(self):
         return self.myip
     
@@ -123,7 +146,8 @@ class WorkerThread(threading.Thread):
     def add_connection(self, dest_address, port):
         # handles adding socket fd to a new thread
         #server_socket
-        client_socket = tcp_sockets.connect(dest_address, port)
+        print("port = ", port)
+        client_socket = tcp_sockets.connect(dest_address, int(port))
         self.event_handler.set()
         self._update_connections("push", ip_addr=dest_address, port=port, socket_object=client_socket)
         
