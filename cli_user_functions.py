@@ -4,113 +4,95 @@ import shlex
 import sys
 import threading
 
-from multithreaded_sockets import WorkerThread
+from multi_threading_sockets import WorkerThread
+# from multithreaded_sockets import WorkerThread
+
 
 def shell_loop(port, cli_event):
-    
-    # Start thread manager
-    #socket_manager = WorkerThread(port)
-    cli_event.set()
-    user_queue = queue.Queue() # using notification method to notify other threads
-    print("Listening on port", port)       
-
+    """
+    Command line shell loop for processing user input and executing socket commands.
+    """
+    print(f"Listening on port {port}")
     print(">> ", end='', flush=True)
-    sys.stdout.flush()
-    while True:
-        # Read input from the user
+    socket_manager.event_handler.set()
+    running = socket_manager.is_alive()
+    
+    while running:
+        # Listen for user input with a timeout of 0.5 seconds
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.5)
 
-        rlist, _, _ = select.select([sys.stdin], [], [], 0.5)  # 1-second timeout for input
-
-        if rlist:
-            user_input = sys.stdin.readline().strip()  # Read user input if available
-        else:
-            user_input = None
-            
-        # Check if the user entered a command (non-empty)
-        # if user_input:
         if sys.stdin in rlist:
-            tokens = shlex.split(user_input)
+            user_input = sys.stdin.readline().strip()
+            tokens = shlex.split(user_input) if user_input else None
 
-            command = tokens[0]
-            # Call the appropriate function or dummy function based on the command
-            # Command routing: decide what function to call based on the command
-            if command == "help":
-                # need the command in the expected argument
-                help()
-            elif command == "myip":
-                print(socket_manager.get_myip())  
-            elif command == "myport":
-                print(socket_manager.get_myport())
-            elif command == "connect":
-                if len(tokens) < 3:
-                    print("Error: 'connect' command requires <destination> <port>.")
-                else:
-                    destination = tokens[1]
-                    port = tokens[2]
-                    
-                    cli_event.clear()
+            if tokens:
+                command = tokens[0].lower()
+
+                # Process commands
+                if command == "help":
+                    help()
+                elif command == "myip":
+                    print(socket_manager.get_myip())
+                elif command == "myport":
+                    print(socket_manager.get_myport())
+                elif command == "connect":
+                    if len(tokens) != 3:
+                        print("Error: 'connect' command requires <destination> <port>.")
+                    else:
+                        destination = tokens[1]
+                        port = tokens[2]
+                        cli_event.clear()
+                        print(f"Connecting to {destination}:{port}")
+                        socket_manager.process_event(tokens)
+                elif command == "list":
+                    socket_manager.list_connections()
+                elif command == "terminate":
+                    if len(tokens) != 2:
+                        print("Error: 'terminate' command requires <connection id>.")
+                    else:
+                        try:
+                            connection_id = int(tokens[1])
+                            print(f"Terminating connection {connection_id}")
+                            socket_manager.process_event(tokens)
+                        except ValueError:
+                            print("Error: Connection id must be an integer.")
+                elif command == "send":
+                    if len(tokens) < 3:
+                        print("Error: 'send' command requires <connection id> <message>.")
+                    else:
+                        try:
+                            connection_id = int(tokens[1])
+                            message = " ".join(tokens[2:])
+                            socket_manager.process_event(tokens)
+                            socket_manager.send_message(connection_id, message)
+                        except ValueError:
+                            print("Error: Connection id must be an integer.")
+                elif command == "exit":
                     socket_manager.process_event(tokens)
-            elif command == "list":
-                socket_manager.list_connections()
-            elif command == "terminate":
-                if len(tokens) < 2:
-                    print("Error: 'terminate' command requires <connection id>. Use 'list' to see available connections.")
+                    socket_manager.join()
+                    cli_event.clear()
+                    break  # Exit loop
                 else:
-                    try:
-                        connection_id = int(tokens[1])
-                        print("terminating connection: ", connection_id)
-                        print("Current length of list = ", len(socket_manager.list_connections()))
-                        cli_event.clear()
-                        socket_manager.process_event(tokens)
-                    except ValueError:
-                        print("Error: Connection id must be an integer.")
-            elif command == "send":
-                if len(tokens) < 3:
-                    print("Error: 'send' command requires <connection id> <message>.")
-                else:
-                    try:
-                        connection_id = int(tokens[1])
-                        message = " ".join(tokens[2:])
+                    print(f"Unknown command: {command}")
 
-                        # Check if connection_id is in the valid range of connections
-                        if connection_id < 1 or connection_id > len(socket_manager.list_connections):
-                            print("Error: Connection id is out of range.")
-                            return
-                        #checks for the legnth of the message 
-                        if len(message) < 1:
-                            print("Error: Message is too short.")
-                            return
-                        elif len(message) > 256:
-                            print("Error: Message is too long (max 256 characters).")
-                            return
-
-                        cli_event.clear()
-                        socket_manager.process_event(tokens)
-                        socket_manager.send_message(connection_id, message)
-                    except ValueError:
-                        print("Error: Connection id must be an integer.")
-            elif command == "exit":
-                cli_event.clear()
-                #can also use command in .process_event(tokens) if handles are just the command
-                socket_manager.process_event(tokens)
-                break  # Exit the loop to stop the shell
+                # Prompt for next command
+                print(">> ", end='', flush=True)
             else:
-                # If the command isn't recognized, inform the user
-                cli_event.clear()
-                print("Unknown command: ", command)
-                
-            sys.stdout.flush()
-            print(">> ", end='', flush=True)
+                print(">> ", end='', flush=True)
         else:
-            # TODO: logic for thread control to server listener
+            # Check server for incoming messages
             cli_event.clear()
-            socket_manager.server_listening()
+            socket_manager._server_listening()
             cli_event.set()
-            # timer for 5 seconds
+           
+            
+    return 0
+    
 
-
-## suggestion to remove the functions below unless you add logic to them. 
 def help():
+    """
+    Display help information for available commands.
+    """
     text = """
 OPTIONS:
 help
@@ -118,60 +100,41 @@ help
 
 myip
    Display the IP address of this process.
-   Note: The IP should not be your “Local” address (127.0.0.1). It should be the actual IP of the computer.
 
 myport
    Display the port on which this process is listening for incoming connections.
 
 connect <destination> <port no>
-   This command establishes a new TCP connection to the specified <destination> at the specified <port no>.
-   The <destination> is the IP address of the computer. Any attempt to connect to an invalid IP should be 
-   rejected and a suitable error message should be displayed. Success or failure in connections between 
-   two peers should be indicated by both the peers using suitable messages.
-   Self-connections and duplicate connections should be flagged with suitable error messages.
+   Establish a new TCP connection to the specified <destination> at the specified <port no>.
 
 list
-   Display a numbered list of all the connections this process is part of. This list includes connections 
-   initiated by this process and connections initiated by other processes. The output should display the 
-   IP address and the listening port of all the peers the process is connected to.
-   Example:
-   id: IP address       Port No.
-   1:  192.168.21.21    4545
-   2:  192.168.21.22    5454
-   3:  192.168.21.23    5000
-   4:  192.168.21.24    5000
+   Display a numbered list of all the connections this process is part of.
 
 terminate <connection id>
-   This command terminates the connection listed under the specified number when LIST is used to display 
-   all connections. Example: terminate 2. In this example, the connection with 192.168.21.22 should end. 
-   An error message is displayed if a valid connection does not exist as number 2. If a remote machine 
-   terminates one of your connections, you should also display a message.
+   Terminate the connection listed under the specified id.
 
 send <connection id> <message>
-   (For example, send 3 "Oh! This project is a piece of cake"). This sends the message to the host on the 
-   connection designated by the number 3 when the "list" command is used. The message can be up to 100 
-   characters long, including spaces. After executing the command, the sender should display “Message 
-   sent to <connection id>” on the screen. On receiving a message, the receiver should display the message 
-   along with the sender's information.
-   Example:
-   Message received from 192.168.21.21
-   Sender’s Port: <Port number of the sender>
-   Message: “<received message>”
+   Send a message to the specified connection id.
 
 exit
-   Close all connections and terminate this process. The other peers should also update their connection 
-   list by removing the peer that exits.
+   Close all connections and terminate the process.
     """
     print(text)
 
+
 if __name__ == "__main__":
-    
+    # Check for the port argument
     if len(sys.argv) < 2:
+        print("Error: Port number required.")
         sys.exit(1)
-    
-    port = sys.argv[1]
+
+    port = int(sys.argv[1])  # Get port from command line arguments
+
+    # Create WorkerThread and event for managing CLI and server interaction
     global socket_manager
     socket_manager = WorkerThread(port)
-    event = threading.Event()
-    cli_thread = threading.Thread(target=shell_loop, args=(port, event))
+    cli_event = threading.Event()
+
+    # Start the CLI shell in a separate thread
+    cli_thread = threading.Thread(target=shell_loop, args=(port, cli_event), daemon=False)
     cli_thread.start()
