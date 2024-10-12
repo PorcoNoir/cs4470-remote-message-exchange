@@ -1,60 +1,206 @@
+import queue
 import shlex
+import sys
+import threading
+import re
+import socket 
 
-def shell_loop():
+
+from multithreaded_sockets import WorkerThread
+
+def shell_loop(port, cli_event):
+    
+    # Start thread manager
+    socket_manager = WorkerThread(port)
+    cli_event.set()
+    user_queue = queue.Queue() # using notification method to notify other threads
+    print("Listening on port", port)
+
     while True:
         # Read input from the user
-        user_input = input("chat: ")  # Prompt similar to a shell
+        user_input = input(">> ")  # Prompt similar to a shell
         # Check if the user entered a command (non-empty)
         if user_input.strip():
             tokens = shlex.split(user_input)
 
             command = tokens[0]
+            cli_event
             # Call the appropriate function or dummy function based on the command
             # Command routing: decide what function to call based on the command
             if command == "help":
-                dummy_help()
+                # need the command in the expected argument
+                help()
             elif command == "myip":
-                dummy_myip()  
+                print(socket_manager.get_myip())  
             elif command == "myport":
-                dummy_myport()
+                print(socket_manager.get_myport())
             elif command == "connect":
-                print("Error: 'connect' command requires <destination> <port no>.")
+                if len(tokens) < 3:
+                    print("Error: 'connect' command requires <destination> <port>.")
+                else:
+                    destination = tokens[1]
+                    port = tokens[2]
+                    #tried to add input error for the ip an port from user
+                    if not is_valid_ip(destination):
+                        print("Error: ", destination, " is not a valid IP address.")
+                    elif not is_valid_port(port):
+                        print("Error: ", port, " is not a valid port number.")
+                        cli_event.clear()
+                    else:
+                        socket_manager.process_event(command)
+                        socket_manager.add_connection(destination, port)
             elif command == "list":
-                dummy_list()
+                socket_manager.list_connections()
             elif command == "terminate":
-                print("Error: 'terminate' command requires <connection id>.")
+                if len(tokens) < 2:
+                    print("Error: 'terminate' command requires <connection id>. Use 'list' to see available connections.")
+                else:
+                    try:
+                        connection_id = int(tokens[1])
+                        if connection_id < 0 or connection_id >= len(socket_manager.list_connections()):
+                            print("Error: Connection id out of range.")
+                            return
+                        
+                        connection = socket_manager.get_connection(connection_id)
+                        if is_connection_active(connection) == 0:
+                            print("Connection ", connection_id," is dead, cannot send message.")
+                            return
+                        
+                        cli_event.clear()
+                        socket_manager.process_event(command)
+                        socket_manager.terminate_connection(connection_id)
+                    except ValueError:
+                        print("Error: Connection id must be an integer.")
             elif command == "send":
-                print("Error: 'send' command requires <connection id> <message>.")
+                if len(tokens) < 3:
+                    print("Error: 'send' command requires <connection id> <message>.")
+                else:
+                    try:
+                        connection_id = int(tokens[1])
+                        message = " ".join(tokens[2:])
+
+                        # Check if connection_id is in the valid range of connections
+                        if connection_id < 1 or connection_id > len(socket_manager.list_connections()):
+                            print("Error: Connection id is out of range.")
+                            return
+                        connection = socket_manager.get_connection(connection_id)
+                        if is_connection_active(connection) == 0:
+                            print("Connection ", connection_id, " is dead, cannot send message.")
+                            return
+                        #checks for the legnth of the message 
+                        if len(message) < 1:
+                            print("Error: Message is too short.")
+                            return
+                        elif len(message) > 256:
+                            print("Error: Message is too long (max 256 characters).")
+                            return
+
+                        cli_event.clear()
+                        socket_manager.process_event(command)
+                        socket_manager.send_message(connection_id, message)
+                    except ValueError:
+                        print("Error: Connection id must be an integer.")
+
             elif command == "exit":
-                dummy_exit() 
+                cli_event.clear()
+                #can also use command in .process_event(command) if handles are just the command
+                socket_manager.process_event(tokens)
                 break  # Exit the loop to stop the shell
             else:
                 # If the command isn't recognized, inform the user
+                cli_event.clear()
                 print("Unknown command: ", command)
+        else:
+            return
 
-def dummy_help():
-    print("Available commands: help, myip, myport, connect, list, terminate, send, exit")
+## suggestion to remove the functions below unless you add logic to them. 
+def help():
+    text = """
+OPTIONS:
+help
+   Display information about the available user interface options or command manual.
 
-def dummy_myip():
-    print("Your IP address is 192.168.1.2 (dummy)")
+myip
+   Display the IP address of this process.
+   Note: The IP should not be your “Local” address (127.0.0.1). It should be the actual IP of the computer.
 
-def dummy_myport():
-    print("Listening on port 4545 (dummy)")
+myport
+   Display the port on which this process is listening for incoming connections.
 
-def dummy_connect(destination, port_num):
-    print("Connecting to ", destination," on port ", port_num)
+connect <destination> <port no>
+   This command establishes a new TCP connection to the specified <destination> at the specified <port no>.
+   The <destination> is the IP address of the computer. Any attempt to connect to an invalid IP should be 
+   rejected and a suitable error message should be displayed. Success or failure in connections between 
+   two peers should be indicated by both the peers using suitable messages.
+   Self-connections and duplicate connections should be flagged with suitable error messages.
 
-def dummy_list():
-    print("1: 192.168.1.3 5000 (dummy)\n2: 192.168.1.4 6000 (dummy)")
+list
+   Display a numbered list of all the connections this process is part of. This list includes connections 
+   initiated by this process and connections initiated by other processes. The output should display the 
+   IP address and the listening port of all the peers the process is connected to.
+   Example:
+   id: IP address       Port No.
+   1:  192.168.21.21    4545
+   2:  192.168.21.22    5454
+   3:  192.168.21.23    5000
+   4:  192.168.21.24    5000
 
-def dummy_terminate(connection_id):
-    print("Terminating connection", connection_id)
+terminate <connection id>
+   This command terminates the connection listed under the specified number when LIST is used to display 
+   all connections. Example: terminate 2. In this example, the connection with 192.168.21.22 should end. 
+   An error message is displayed if a valid connection does not exist as number 2. If a remote machine 
+   terminates one of your connections, you should also display a message.
 
-def dummy_send(connection_id, message):
-    print("Message sent to ", connection_id,": ", message)
+send <connection id> <message>
+   (For example, send 3 "Oh! This project is a piece of cake"). This sends the message to the host on the 
+   connection designated by the number 3 when the "list" command is used. The message can be up to 100 
+   characters long, including spaces. After executing the command, the sender should display “Message 
+   sent to <connection id>” on the screen. On receiving a message, the receiver should display the message 
+   along with the sender's information.
+   Example:
+   Message received from 192.168.21.21
+   Sender’s Port: <Port number of the sender>
+   Message: “<received message>”
 
-def dummy_exit():
-    print("Exiting and closing all connections (dummy)")
+exit
+   Close all connections and terminate this process. The other peers should also update their connection 
+   list by removing the peer that exits.
+    """
+    print(text)
+    #TODO: please add descriptions for these summarizing their functionality and how the user should call them
+
+#check ipaddress format is correct
+def is_valid_ip(ip):
+    # Basic IP validation using regex (checks format X.X.X.X where X is 0-255)
+    pattern = re.compile(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$")
+    if pattern.match(ip):
+        # Ensure that each section of the IP is between 0 and 255
+        parts = ip.split('.')
+        return all(0 <= int(part) <= 255 for part in parts)
+    return False
+#function to validate port no.
+def is_valid_port(port):
+    # Check if the port is a valid integer and in the range 1-65535
+    try:
+        port_num = int(port)
+        return 1 <= port_num <= 65535
+    except ValueError:
+        return False
+def is_connection_active(socket):
+    try:
+        # Try sending zero-length data to the socket. This won't affect normal socket operations.
+        socket.send(b'')
+    except socket.error:
+        # If any error occurs, the socket is considered dead
+        return 0
+    return 1
 
 if __name__ == "__main__":
-    shell_loop()
+    
+    if len(sys.argv) < 2:
+        sys.exit(1)
+    
+    port = sys.argv[1]
+    event = threading.Event()
+    cli_thread = threading.Thread(target=shell_loop, args=(port, event))
+    cli_thread.start()
