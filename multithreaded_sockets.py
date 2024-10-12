@@ -141,7 +141,7 @@ class WorkerThread(threading.Thread):
         for k,v in self.connection_list.items():
             print(k, v[0], v[1], sep="\t")
         #print("TBD: TEMPLATE FOR CONNECTIONS LIST")
-        return        
+        return self.connection_list       
 
     def add_connection(self, dest_address, port):
         # handles adding socket fd to a new thread
