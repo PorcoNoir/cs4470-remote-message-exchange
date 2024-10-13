@@ -91,7 +91,7 @@ def shell_loop(port, cli_event):
                         else:
                             try:
                                 connection_id = int(tokens[1])
-                                message = ' '.join(tokens[2:])
+                                message = ' '.join(tokens[2:])#allows user ot send full messages
                                 socket_manager.process_event(tokens)
                                 socket_manager.send_message(connection_id, message)
                             except ValueError:
