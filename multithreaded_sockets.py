@@ -2,6 +2,7 @@ import socket
 import threading
 import time
 import queue
+import select
 
 from sock import TcpSocket
 
@@ -96,16 +97,17 @@ class WorkerThread(threading.Thread):
         while time.time() < end_time:
                
             # Check if socket is open
-            if self.server_socket.is_socket_open():
+            if self.server_socket:
             # if len(self.threads_open) == 1:
                 try:
-                    print('trying to accept....')
                     # Accept incoming connections
-                    client_sock = self.server_socket.accept_incoming_connections()
-                    dest_address = client_sock.getpeername()
+                    rlist, _, _ = select.select([self.server_socket], [], [], 1)
+                    if rlist:
+                        client_sock = self.server_socket.accept_incoming_connections()
+                        dest_address = client_sock.getpeername()
 
-                    # Update the connection details
-                    self._update_connections("push", ip_addr=dest_address[0], port=dest_address[1], socket_object=client_sock)
+                        # Update the connection details
+                        self._update_connections("push", ip_addr=dest_address[0], port=dest_address[1], socket_object=client_sock)
                     
                 except TimeoutError:
                     # Handle timeout error for socket accept
