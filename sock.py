@@ -25,15 +25,11 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
 
    # Only accessed by start_server_thread function to start the server thread. 
     def _server_thread(self, port):
-        # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        
-        print("Debug: Starting server thread on ", self.server_ip, "port", port)
         self.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.bind((self.server_ip, port))
 
         self.tcp_event.set()
         self.listen(self.MAX_CONNECTIONS)
-        print("Debug: Listening on port:", port)
         self.tcp_event.clear()
 
     def accept_incoming_connections(self):
@@ -41,11 +37,8 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
         while not new_incoming_connection:
             #TODO: we need the client socket returned
             try:
-                print("accepting...")
+                self.tcp_event.clear()
                 full_socket, client_address = self.accept()
-                print("Debug: Full socket info:", full_socket)
-                print("Debug: Client address (host, port):", client_address)
-                #create_client_sock(full_socket, client_address)
                 new_incoming_connection = True
                 new_client_convo = threading.Thread(target=self._reception_thread, args=(full_socket,), daemon=False)
                 new_client_convo.start()

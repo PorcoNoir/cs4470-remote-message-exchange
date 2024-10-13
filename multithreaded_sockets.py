@@ -49,13 +49,11 @@ class WorkerThread(threading.Thread):
             else:
                 print(f"Connection id {connection_id} not found.")
             
-        print(f"Updated connections. Number of connections: {len(self.connection_list)}")
+        print(f"Updated connections. Number of connections = {len(self.connection_list)}")
 
     def _close_thread(self, connection_id):
         thread = self.threads_open[connection_id]
-        print("Current thread:\n",thread,"\n")
         if thread:
-            print("_close_thread")
             del self.threads_open[connection_id]
             print(f"Closed thread for connection {connection_id}.")
         self.event_handler.clear()
@@ -69,7 +67,7 @@ class WorkerThread(threading.Thread):
         port = values[1]
         sock_obj = values[2]
         
-        print('Terminating connection ', ip, ":",port)
+        print('Terminating connection ', connection_id, ": ", ip, ":",port)
         if sock_obj:
             print(f"Terminating connection {ip}:{port}")
             sock_obj.close()
@@ -83,9 +81,8 @@ class WorkerThread(threading.Thread):
         print("STARTING SERVER")
         self._update_connections(
             "push",
-            ip_addr=self.myip, 
+            ip_addr=self.myip, port=self.myport,
             socket_object=self.server_socket,
-            port=self.myport,
             thread_obj=self.server_socket_thread
         )
     
@@ -107,7 +104,8 @@ class WorkerThread(threading.Thread):
                         dest_address = client_sock.getpeername()
 
                         # Update the connection details
-                        self._update_connections("push", ip_addr=dest_address[0], port=dest_address[1], socket_object=client_sock)
+                        self._update_connections("push", ip_addr=dest_address[0], port=dest_address[1], 
+                                                 socket_object=client_sock)
                     
                 except TimeoutError:
                     # Handle timeout error for socket accept
@@ -145,10 +143,14 @@ class WorkerThread(threading.Thread):
         if len(self.threads_open) > 1:
             recv_start_time = time.time()
             while time.time() - recv_start_time < 1:
-                for thread in self.threads_open.values():
-                    self.event_handler.set()
-                    self.command_queue.put(thread.recv(1024))
-                    self.event_handler.clear()
+                try:
+                    for thread in self.threads_open.values():
+                        self.event_handler.set()
+                        self.command_queue.put(thread.recv(1024))
+                        self.event_handler.clear()
+                except Exception as e:
+                    print("Connection not available")
+                    pass
     
     def get_myip(self):
         return self.server_socket.get_myip()
@@ -160,13 +162,15 @@ class WorkerThread(threading.Thread):
         command, *args = event
         args = event[1:]
         
-        print("args = ", args)
         self.set_event_handle()
 
         if command == "terminate":
             self._update_connections("pop", connection_id=int(args[0]))
         elif command == "send":
-            self.send_message(int(args[0]), args[1])
+            #allows user ot send full messages
+            connection_id = int(event[1])
+            message = ' '.join(event[2:])
+            self.send_message(int(connection_id), message)
         elif command == "connect":
             self._connect_to_client(args[0], int(args[1]))
         elif command == "exit":
@@ -179,11 +183,11 @@ class WorkerThread(threading.Thread):
     def _connect_to_client(self, ip, port):
         self.event_handler.clear()
         self.current_client = self.server_socket.client_connect(ip, port)
-        print(self.connection_list)
         client_thread = threading.Thread(target=self.read_message, args=(self.current_client,), daemon=False)
         client_thread.start()
-        self._update_connections("push", ip_addr=ip, port=port, socket_object=self.current_client, thread_obj=client_thread)
-        print(self.connection_list)
+        self._update_connections("push", ip_addr=ip, port=port, 
+                                 socket_object=self.current_client, 
+                                 thread_obj=client_thread)
         self.event_handler.set()
 
     def set_event_handle(self):

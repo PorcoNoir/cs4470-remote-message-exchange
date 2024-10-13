@@ -12,7 +12,7 @@ def shell_loop(port, cli_event):
     """
     Command line shell loop for processing user input and executing socket commands.
     """
-    print(f"Listening on port {port}")
+    #print(f"Listening on port {port}")
     print(">> ", end='', flush=True)
     socket_manager.event_handler.set()
     running = socket_manager.is_alive()
@@ -34,18 +34,23 @@ def shell_loop(port, cli_event):
                 tokens = None
                 if char in (b'\r', b'\n'):  # Enter key pressed
                     if user_input.strip():  # Check if there's input
-                        tokens = shlex.split(user_input.strip())  # Tokenize input
-                        print(f"Tokens: {tokens}")  # Process tokens as needed
+                        tokens = shlex.split(user_input.strip())  # Tokenize input 
+                        print()#dont know if this was the thing that was asked when asked to fix the token
                     user_input = ""  # Reset user input after processing
                     print(">> ", end='', flush=True)  # Print prompt again
                 elif char == b'\x08':  # Backspace key pressed
-                    user_input = user_input[:-1]  # Remove last character
-                    #print('\b \b', end='', flush=True)  # Erase the last character from console
+                    #
+                    #
+                    #to erase mistakes
+                    #able to see the user input and can delete/rewite mistakes
+                    if user_input: # Ensure there's something to delete
+                        user_input = user_input[:-1]  # Remove last character
+                        print('\b \b', end='', flush=True) #Erase the last character from console
                 else:
-                    user_input += char.decode()  # Append character to user input
-                    #print(char.decode(), end='', flush=True)  # Display the character
+                    # Append character to user input and display character
+                    user_input += char.decode()
+                    print(char.decode(), end='', flush=True)
 
-                    #tokens = shlex.split(user_input) if user_input else None
                 if tokens:
                     command = tokens[0].lower()
 
@@ -82,10 +87,10 @@ def shell_loop(port, cli_event):
                             print("Error: 'send' command requires <connection id> <message>.")
                         else:
                             try:
+                                #allows user ot send full messages
                                 connection_id = int(tokens[1])
-                                message = tokens[2:]
+                                message = ' '.join(tokens[2:])
                                 socket_manager.process_event(tokens)
-                                socket_manager.send_message(connection_id, message)
                             except ValueError:
                                 print("Error: Connection id must be an integer.")
                     elif command == "exit":
@@ -97,7 +102,7 @@ def shell_loop(port, cli_event):
                         print(f"Unknown command: {command}")
 
                     # Prompt for next command
-                    print(">> ", end='', flush=True)
+                    #print(">> ", end='', flush=True)
                 else:
                     pass
             else:
@@ -151,7 +156,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     p = int(sys.argv[1])  # Get port from command line arguments
-    print("port = ", p)
+
     # Create WorkerThread and event for managing CLI and server interaction
     global socket_manager
     socket_manager = WorkerThread(p)
