@@ -2,195 +2,136 @@
 
 import errno
 import socket
-import sys
 import threading
-import time
+import queue
+from requests import get
 
-total_connections = 0
-list_of_sockets = {"IP": -1} # format {ip_addr: port_no} 
-# will come back to this, have to change this or configure it properly
+# class TcpSocketHandler():
+class TcpSocket(socket.socket):   # Question: should these data fields be private?
+    def __init__(self, family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0, fileno=None):  
+        super().__init__(family, type, proto, fileno)
+        self.MAX_CONNECTIONS = 5
+        self.receive_message_queue = queue.Queue()  # Queue incoming messages for WorkerThread to handle.
+        self.server_ip = self.get_myip()
+        
+        self.tcp_event = threading.Event()          # Take and give up event control with a TcpSocket object.
 
-# for now, client socket is actually created in connect function
-def create_client_sock(full_socket, client_address):
-    global total_connections                                        # come back to this
-    total_connections += 1                                          # come back to this
-    list_of_sockets[client_address[0]] = client_address[1]          # come back to this
-    print('Got connection from', client_address)
-    
-    full_socket.send(b'Thank you for connecting')
-    full_socket.close()
+    # Start this machine's server thread.
+    # server_socket is a socket object created prior to calling this function, and is passed as a parameter along with the port this machine's server is listening on.
+    def start_server_thread(self, port):
 
-# server_thread function -------------------------------------------------
-def server_thread(name, server_sock, port):
-    server_address = server_sock.getsockname()
-    host = server_address[0]
-    
-    print("Debug: Starting", name)
-    print(host,":",port)
-    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_sock.bind((host, port))
+        server_thread = threading.Thread(target=self._server_thread, args=(port,))
+        return server_thread
 
-    print("Debug: Listening on port:", port)
-    server_sock.settimeout(1)
-    tcp_event = threading.Event()
-    tcp_event.set()
-    server_sock.listen(5)
-    tcp_event.clear()
-        #print("Debug: Finishing", name)
-    # listen on the port, call function to create client socket when a machine connects
+   # Only accessed by start_server_thread function to start the server thread. 
+    def _server_thread(self, port):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_address = server_socket.getsockname()
+        host = server_address[0]
+        
+        print("Debug: Starting server thread on ", self.server_ip, "port", port)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((server_address[0], port))
 
-def is_socket_open(s):
-    """Checks if a socket is open."""
-    try:
-        server_address = s.getsockname()
-        s.settimeout(1)  # Set a timeout for the connection attempt
-        s.connect((server_address[0], server_address[1]))
-        return True
-    except OSError as e:
-        if e.errno == errno.EISCONN:
+        self.tcp_event.set()
+        server_socket.listen(self.MAX_CONNECTIONS)
+        print("Debug: Listening on port:", port)
+        self.tcp_event.clear()
+
+    def accept_incoming_connections(self):
+        new_incoming_connection = False
+        while not new_incoming_connection:
+            #TODO: we need the client socket returned
+            try:
+                full_socket, client_address = self.accept()
+                print("Debug: Full socket info:", full_socket)
+                print("Debug: Client address (host, port):", client_address)
+                #create_client_sock(full_socket, client_address)
+                new_incoming_connection = True
+                new_client_convo = threading.Thread(target=self._reception_thread, args=(full_socket,), daemon=False)
+                new_client_convo.start()
+            except Exception as e:
+                print(f"Error accepting connections: {e}")
+                break
+            
+            self.tcp_event.clear()
+            return full_socket
+
+    def get_myip(self):
+        host = socket.gethostname()
+        ip_address = socket.gethostbyname(host)
+        return ip_address
+        #print('My public IP address is: {}'.format(ip))
+
+
+    # A thread is created on this function when a connection is received. 
+    # This is where we receive messages from the client that connected.
+    # Assumption:   Terminating a connection via WorkerThread will safely close the participating client socket.
+    def _reception_thread(self, client_socket):
+        try:
+            while True:
+                message = client_socket.recv(1024).decode('utf-8')
+                if not message:
+                    print("Client disconnected.")
+                    break
+                print(f"Received message: {message}")
+                self.receive_message_queue.put([client_socket, message])
+        except Exception as e:
+            print(f"Error receiving message: {e}")
+        finally:
+            client_socket.close()
+
+    # Call this function to get the next message in the queue.
+    # Returns a list with two values of the form [client_socket, "message"]
+    def receive(self):
+        if not self.receive_message_queue.empty():
+            return self.receive_message_queue.get()
+        return None
+        
+    # Create a client socket on this machine to connect to another machine's server at its IP address (destination) and on its listening port.
+    def client_connect(self, destination, port_no):
+        # if destination and/or port no not found, give the user a message
+        # else, do the deed
+        
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        print("Debug: connecting", destination, ":", port_no)
+
+        try:
+            print("connecting...")
+            print('ip:port = ',destination,":",port_no)
+            client_socket.connect((destination, port_no))
+            #print(client_socket.recv(1024))
+
+        except ConnectionRefusedError as cre:
+            print("ConnectionRefusedError. Make sure you are entering available destinations and/or port numbers.")
+        except TimeoutError as te:
+            print("TimeoutError. Make sure you are entering available destinations and/or port numbers.")
+            
+        return client_socket
+
+    # This machine's client wants to message another machine's server, who should have an open _reception_thread if this client is connected.
+    # Assumption:   Client socket is stored and can be located with a connection id entered as an integer by user.
+    # Assumption:   Checking if the user is trying to send to a valid connection is done prior to calling this function.
+
+    def send(self, client_socket, message):
+        try:
+            client_socket.send(message.encode('utf-8'))
+        except Exception as e:
+            print(f"Error sending message: {e}")
+            
+    def is_socket_open(self):
+        """Checks if a socket is open."""
+        try:
+            server_address = self.getsockname()
+            self.settimeout(1)  # Set a timeout for the connection attempt
+            self.connect((server_address[0], server_address[1]))
             return True
-    except (socket.timeout, ConnectionRefusedError):
-        return False
-
-def accept_incoming_connections(server_sock):
-    new_incoming_connection = False
-    while not new_incoming_connection:
-        #TODO: we need the client socket returned
-        full_socket, client_address = server_sock.accept()
-        print("Debug: Full socket info:", full_socket)
-        print("Debug: Client address (host, port):", client_address)
-        #create_client_sock(full_socket, client_address)
-        new_incoming_connection = True
-        
-        # for x, y in list_of_sockets.items():
-        #     print(x, ":", y)
-
-        print("Debug: Bottom of server_thread while loop.")
-        return full_socket
-
-# Functions to handle user input commands.
-
-def command_not_recognized():
-    print("Command not recognized. Type 'help' to view available user options.")
-
-def help():
-    print("Debug: here are all the things you can do")
-
-def my_ip(ip_address):
-    print("This machine IP is:", ip_address)
-
-def my_port(port):
-    print("Debug: This machine listening port is:", port)
-
-def display_connections_list():
-    print("Debug: here are all current connections")
-
-def exit_app():
-    print("Debug: all connections and process will terminate")
-
-def terminate_connection(connection_id):
-    # if connection id not found in list, give the user a message
-    # else, do the deed
-    print("Debug: terminating this connection:", connection_id)
-
-def connect(destination, port_no):
-    # if destination and/or port no not found, give the user a message
-    # else, do the deed
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    print("Debug: connecting", destination, ":", port_no)
-
-    try:
-        print("connecting...")
-        client_socket.connect((destination, port_no))
-        #print(client_socket.recv(1024))
-
-    except ConnectionRefusedError as cre:
-        print("ConnectionRefusedError. Make sure you are entering available destinations and/or port numbers.")
-    except TimeoutError as te:
-        print("TimeoutError. Make sure you are entering available destinations and/or port numbers.")
-        
-    return client_socket
-
-def send_message(connection_id, message):
-    # if connection id not in list, give the user a message
-    # if message is over 100 characters, cut it down to 100 and give both users a message it was cut off
-    # else, do the deed
-    print("Debug: sending message to", connection_id)
-
-# Infinite loop to take user commands until user exits.
-def launch_user_input_loop():
-    print("Welcome to CS 4470 chat application demo. Type 'help' to view available user options.")
-
-    exit = False
-    while exit == False:
-
-        # Taking input from the user; commands are either 1, 2, or 3 values.
-        next = input().split(" ", 2)
-
-        # If the command is a single value (i.e. help, myip, myport, list, exit).
-        if len(next) == 1:
-            match next[0]:
-                case "help":
-                    help()
-                case "myip":
-                    my_ip(ip_address)
-                case "myport":
-                    my_port(port)
-                case "list":
-                    display_connections_list()
-                case "exit":
-                    exit_app()
-                    exit = True
-                case _:
-                    command_not_recognized()
-
-        # If the command is two values (i.e. terminate <connection id>).
-        elif len(next) == 2:
-            match next[0]:
-                case "terminate":
-                    try:
-                        int(next[1]) # cast str to int for use in function
-                        terminate_connection(next[1])
-                    except ValueError as ve: # if str cannot be cast, then the command isn't recognized
-                        command_not_recognized()
-                case _:
-                    command_not_recognized()
-
-        # If the command is three values (i.e. connect <destination> <port no>, send <connection id> <message>).
-        elif len(next) == 3:
-            match next[0]:
-                case "connect":
-                    try:
-                        # int(next[2])   <- There was an error where this wasn't working. FIXED: casting to int in the connect function instead of here.
-                        connect(next[1], next[2]) # Note: next[1] (the destination IP) is a str
-                    except ValueError as ve:
-                        command_not_recognized()
-                case "send":
-                    try:
-                        int(next[1]) # Note: this may cause errors like in connect above, check back here if so, and same for terminate above
-                        send_message(next[1], next[2]) 
-                    except ValueError as ve:
-                        command_not_recognized()
-                case _:
-                    command_not_recognized()
-        # If the command is over three values.
-        else:
-            command_not_recognized()
-
-        print("Debug: Bottom of input loop.")
+        except OSError as e:
+            if e.errno == errno.EISCONN:
+                return True
+        except (socket.timeout, ConnectionRefusedError):
+            return False
 
 
-# Main thread start ----------------------------------------------------------------
-def start_server(server_sock, port):
-
-    # Start the thread that this machine's server listens on.
-    port = int(port)
-    tcp_server = threading.Thread(target=server_thread, args=("server thread", server_sock, port))
-    return tcp_server
-    
-    # Give control back to CLI
-
-    # Start accepting user input with loop.
-    #launch_user_input_loop()
-    
+# Question: Have seen examples use .encode() and .decode() for recv and send. Should our implementation use this?
