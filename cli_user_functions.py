@@ -34,8 +34,8 @@ def shell_loop(port, cli_event):
                 tokens = None
                 if char in (b'\r', b'\n'):  # Enter key pressed
                     if user_input.strip():  # Check if there's input
-                        tokens = shlex.split(user_input.strip())  # Tokenize input
-                        print(f"\nTokens: {tokens}")  # Process tokens as needed
+                        tokens = shlex.split(user_input.strip())  # Tokenize input 
+                        print()#dont know if this was the thing that was asked when asked to fix the token
                     user_input = ""  # Reset user input after processing
                     print(">> ", end='', flush=True)  # Print prompt again
                 elif char == b'\x08':  # Backspace key pressed
