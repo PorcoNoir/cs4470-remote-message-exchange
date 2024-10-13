@@ -3,7 +3,7 @@ import threading
 import time
 import queue
 
-from sock import TcpSocket
+from socket_implementation import TcpSocket
 
 
 class WorkerThread(threading.Thread):
@@ -76,7 +76,7 @@ class WorkerThread(threading.Thread):
     def _start_tcp_server(self, port):
         self.event_handler.clear()
         self.server_socket_thread = self.server_socket.start_server_thread(port)
-        self.myip = self.server_socket.getsockname()[0]
+        # self.myip = self.server_socket.getsockname()[0]
         self.myip = self.server_socket.get_myip()
         self.myport = port
 

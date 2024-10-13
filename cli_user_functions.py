@@ -4,8 +4,8 @@ import shlex
 import sys
 import threading
 
-from multi_threading_sockets import WorkerThread
-# from multithreaded_sockets import WorkerThread
+# from multi_threading_sockets import WorkerThread
+from multithreaded_sockets import WorkerThread
 
 
 def shell_loop(port, cli_event):
@@ -19,9 +19,12 @@ def shell_loop(port, cli_event):
     
     while running:
         # Listen for user input with a timeout of 0.5 seconds
-        rlist, _, _ = select.select([sys.stdin], [], [], 0.5)
+        # rlist, _, _ = select.select([sys.stdin], [], [], 0.5)
+        # rlist, ,  = select.select([sys.stdin], [], [], 0.5)
+        user_input = input("chat: ")  # Prompt similar to a shell
 
-        if sys.stdin in rlist:
+        if user_input.strip():
+        # if sys.stdin in rlist:
             user_input = sys.stdin.readline().strip()
             tokens = shlex.split(user_input) if user_input else None
 

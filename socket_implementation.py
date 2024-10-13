@@ -26,12 +26,11 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
    # Only accessed by start_server_thread function to start the server thread. 
     def _server_thread(self, port):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = server_socket.getsockname()
-        host = server_address[0]
-        
+        server_address = self.get_myip()
+
         print("Debug: Starting server thread on ", self.server_ip, "port", port)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind((server_address[0], port))
+        server_socket.bind((server_address, port))
 
         self.tcp_event.set()
         server_socket.listen(self.MAX_CONNECTIONS)
