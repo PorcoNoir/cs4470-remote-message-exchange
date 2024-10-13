@@ -76,17 +76,18 @@ class WorkerThread(threading.Thread):
     def _start_tcp_server(self, port):
         self.event_handler.clear()
         self.server_socket_thread = self.server_socket.start_server_thread(port)
-        self.myip = self.server_socket.getsockname()[0]
+        #self.myip = self.server_socket.getsockname()[0]
         self.myip = self.server_socket.get_myip()
         self.myport = port
-
+        print("STARTING SERVER")
         self._update_connections(
             "push",
             ip_addr=self.myip, 
             socket_object=self.server_socket,
-            port=self.myport, 
+            port=self.myport,
             thread_obj=self.server_socket_thread
         )
+    
     def _server_listening(self):
         self.event_handler.set()
         start_time = time.time()
@@ -96,7 +97,9 @@ class WorkerThread(threading.Thread):
                
             # Check if socket is open
             if self.server_socket.is_socket_open():
+            # if len(self.threads_open) == 1:
                 try:
+                    print('trying to accept....')
                     # Accept incoming connections
                     client_sock = self.server_socket.accept_incoming_connections()
                     dest_address = client_sock.getpeername()
@@ -107,9 +110,11 @@ class WorkerThread(threading.Thread):
                 except TimeoutError:
                     # Handle timeout error for socket accept
                     # print("Connection timed out while listening for incoming connections.")
+                    print("break: oh no")
                     break  # You might want to break or handle the retry logic here
-                
-            if len(self.threads_open) > 1:
+
+            elif len(self.threads_open) > 1:
+                print("trying to receive")
                 recv_start_time = time.time()
                 while time.time() - recv_start_time < 1:
                     try:
@@ -120,7 +125,8 @@ class WorkerThread(threading.Thread):
                             self.event_handler.clear()    
                     except OSError:
                         pass
-                        
+                     
+            self.event_handler.clear()
                 
     def server_listening(self):
         self.event_handler.set()
@@ -141,6 +147,7 @@ class WorkerThread(threading.Thread):
                     self.event_handler.set()
                     self.command_queue.put(thread.recv(1024))
                     self.event_handler.clear()
+    
     def get_myip(self):
         return self.server_socket.get_myip()
     
@@ -150,6 +157,8 @@ class WorkerThread(threading.Thread):
     def process_event(self, event):
         command, *args = event
         args = event[1:]
+        
+        print("args = ", args)
         self.set_event_handle()
 
         if command == "terminate":
@@ -168,9 +177,11 @@ class WorkerThread(threading.Thread):
     def _connect_to_client(self, ip, port):
         self.event_handler.clear()
         self.current_client = self.server_socket.client_connect(ip, port)
+        print(self.connection_list)
         client_thread = threading.Thread(target=self.read_message, args=(self.current_client,), daemon=False)
         client_thread.start()
         self._update_connections("push", ip_addr=ip, port=port, socket_object=self.current_client, thread_obj=client_thread)
+        print(self.connection_list)
         self.event_handler.set()
 
     def set_event_handle(self):
@@ -187,14 +198,15 @@ class WorkerThread(threading.Thread):
         while self.running:
             try:
                 event = self.command_queue.get(block=False, timeout=1)
-                self.process_event(event)
+                # self.process_event(event)
             except queue.Empty:
                 pass
 
     def send_message(self, id, message):
         try:
-            client_sock = self.get_client(id)
-            self.server_socket.send(client_sock, message.encode('utf-8'))  # Use TcpSocket.send method
+            client_sock = self._get_client_socket(id)
+            # self.server_socket.send(client_sock, message.encode('utf-8'))  # Use TcpSocket.send method
+            self.server_socket.send(client_sock, message)  # Use TcpSocket.send method
             self.command_queue.put(message)
         except:
             print("Failed to get client socket")

@@ -102,7 +102,7 @@ def shell_loop(port, cli_event):
                     pass
             else:
                 # Optional: Handle other processing or a sleep to avoid busy waiting
-                pass  # Remove or replace with sleep if needed
+                #pass  # Remove or replace with sleep if needed
                 # Check server for incoming messages
                 cli_event.clear()
                 socket_manager._server_listening()

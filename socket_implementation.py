@@ -4,7 +4,6 @@ import errno
 import socket
 import threading
 import queue
-from requests import get
 
 # class TcpSocketHandler():
 class TcpSocket(socket.socket):   # Question: should these data fields be private?
@@ -13,7 +12,7 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
         self.MAX_CONNECTIONS = 5
         self.receive_message_queue = queue.Queue()  # Queue incoming messages for WorkerThread to handle.
         self.server_ip = self.get_myip()
-        
+        self.myport = None
         self.tcp_event = threading.Event()          # Take and give up event control with a TcpSocket object.
 
     # Start this machine's server thread.
@@ -21,20 +20,19 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
     def start_server_thread(self, port):
 
         server_thread = threading.Thread(target=self._server_thread, args=(port,))
+        self.myport = port
         return server_thread
 
    # Only accessed by start_server_thread function to start the server thread. 
     def _server_thread(self, port):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = server_socket.getsockname()
-        host = server_address[0]
+        # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
         print("Debug: Starting server thread on ", self.server_ip, "port", port)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind((server_address[0], port))
+        self.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.bind((self.server_ip, port))
 
         self.tcp_event.set()
-        server_socket.listen(self.MAX_CONNECTIONS)
+        self.listen(self.MAX_CONNECTIONS)
         print("Debug: Listening on port:", port)
         self.tcp_event.clear()
 
@@ -43,6 +41,7 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
         while not new_incoming_connection:
             #TODO: we need the client socket returned
             try:
+                print("accepting...")
                 full_socket, client_address = self.accept()
                 print("Debug: Full socket info:", full_socket)
                 print("Debug: Client address (host, port):", client_address)
@@ -59,8 +58,7 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
 
     def get_myip(self):
         host = socket.gethostname()
-        ip_address = socket.gethostbyname(host)
-        return ip_address
+        return socket.gethostbyname(host)
         #print('My public IP address is: {}'.format(ip))
 
 
@@ -123,14 +121,14 @@ class TcpSocket(socket.socket):   # Question: should these data fields be privat
     def is_socket_open(self):
         """Checks if a socket is open."""
         try:
-            server_address = self.getsockname()
             self.settimeout(1)  # Set a timeout for the connection attempt
-            self.connect((server_address[0], server_address[1]))
+            self.connect((self.server_ip, self.myport))
             return True
         except OSError as e:
             if e.errno == errno.EISCONN:
                 return True
         except (socket.timeout, ConnectionRefusedError):
+            print("CRE:")
             return False
 
 
