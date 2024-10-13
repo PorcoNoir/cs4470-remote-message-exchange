@@ -31,20 +31,21 @@ def shell_loop(port, cli_event):
             if msvcrt.kbhit():  # Non-blocking check
                 char = msvcrt.getch()  # Get the pressed key
                 
+                tokens = None
                 if char in (b'\r', b'\n'):  # Enter key pressed
                     if user_input.strip():  # Check if there's input
                         tokens = shlex.split(user_input.strip())  # Tokenize input
-                        # Process tokens as needed
-                        print(f"Tokens: {tokens}")  # Example output
+                        print(f"Tokens: {tokens}")  # Process tokens as needed
                     user_input = ""  # Reset user input after processing
+                    print(">> ", end='', flush=True)  # Print prompt again
                 elif char == b'\x08':  # Backspace key pressed
                     user_input = user_input[:-1]  # Remove last character
-                    print('\b \b', end='', flush=True)  # Erase the last character from console
+                    #print('\b \b', end='', flush=True)  # Erase the last character from console
                 else:
                     user_input += char.decode()  # Append character to user input
-                    print(char.decode(), end='', flush=True)  # Display the character
-                tokens = shlex.split(user_input) if user_input else None
+                    #print(char.decode(), end='', flush=True)  # Display the character
 
+                    #tokens = shlex.split(user_input) if user_input else None
                 if tokens:
                     command = tokens[0].lower()
 
@@ -98,8 +99,10 @@ def shell_loop(port, cli_event):
                     # Prompt for next command
                     print(">> ", end='', flush=True)
                 else:
-                    print(">> ", end='', flush=True)
+                    pass
             else:
+                # Optional: Handle other processing or a sleep to avoid busy waiting
+                pass  # Remove or replace with sleep if needed
                 # Check server for incoming messages
                 cli_event.clear()
                 socket_manager._server_listening()
